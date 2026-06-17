@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>농수로 현장 데이터 조회</title>
+  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=72f9554b190c352d9c6f36125078178c"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 12px; background: #f0f4f8; color: #2d3748; font-size: 15px; }
+    .header { background: #1e3a8a; color: #fff; border-radius: 14px; padding: 16px 18px; margin-bottom: 12px; }
+    .header h1 { margin: 0 0 4px; font-size: 1.1rem; }
+    .header-meta { font-size: 0.8rem; opacity: 0.8; }
+    .refresh-btn { float: right; background: #3b82f6; color: #fff; border: none; padding: 7px 14px; border-radius: 8px; font-size: 0.85rem; font-weight: 700; cursor: pointer; }
+    .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+    .stat-card { background: #fff; border-radius: 12px; padding: 12px 10px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.07); }
+    .stat-card .num { font-size: 1.5rem; font-weight: 800; color: #1e3a8a; }
+    .stat-card .lbl { font-size: 0.72rem; color: #64748b; margin-top: 2px; }
+    .stat-card.warn .num { color: #dc2626; }
+    .stat-card.ok   .num { color: #059669; }
+    .filter-bar { background: #fff; border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.07); display: flex; gap: 8px; flex-wrap: wrap; }
+    .filter-bar input, .filter-bar select { flex: 1; min-width: 100px; padding: 8px 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 0.9rem; background: #f8fafc; }
+    .data-card { background: #fff; border-radius: 12px; margin-bottom: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.07); overflow: hidden; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; padding: 11px 14px; border-bottom: 1px solid #e2e8f0; cursor: pointer; }
+    .card-header .ch-id   { font-weight: 800; font-size: 1rem; color: #1e3a8a; }
+    .card-header .ch-time { font-size: 0.75rem; color: #94a3b8; }
+    .badge { font-size: 0.75rem; font-weight: 700; padding: 3px 9px; border-radius: 20px; }
+    .badge-ok   { background: #dcfce7; color: #14532d; }
+    .badge-warn { background: #fee2e2; color: #7f1d1d; }
+    .card-body { padding: 12px 14px; display: none; }
+    .card-body.open { display: block; }
+    .measure-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin-bottom: 10px; }
+    .m-label { font-size: 0.78rem; color: #64748b; }
+    .m-val   { font-weight: 700; color: #1e293b; font-size: 0.95rem; }
+    .velocity-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; background: #f8fafc; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; text-align: center; font-size: 0.82rem; }
+    .velocity-row .vl { color: #64748b; }
+    .velocity-row .vv { font-weight: 700; color: #1e3a8a; }
+    .velocity-row .avg-col { background: #dbeafe; border-radius: 6px; padding: 2px 4px; }
+    .manning-section { background: #f0fdf4; border-radius: 9px; padding: 10px 12px; margin-bottom: 10px; }
+    .manning-section h4 { margin: 0 0 8px; font-size: 0.82rem; color: #047857; }
+    .photo-section { margin-bottom: 10px; }
+    .photo-section h4 { margin: 0 0 8px; font-size: 0.82rem; color: #1e3a8a; }
+    .photo-gallery { display: flex; flex-wrap: wrap; gap: 6px; }
+    .photo-gallery .pg-item { width: 72px; height: 72px; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; display: block; }
+    .photo-gallery .pg-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .manning-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; font-size: 0.82rem; text-align: center; }
+    .mg-item .mg-lbl { color: #6b7280; font-size: 0.72rem; }
+    .mg-item .mg-val { font-weight: 700; color: #065f46; }
+    .err-row { margin-top: 8px; text-align: center; font-size: 0.85rem; font-weight: 700; padding: 4px; border-radius: 6px; }
+    .err-ok   { background: #dcfce7; color: #14532d; }
+    .err-warn { background: #fee2e2; color: #7f1d1d; }
+    .memo-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 12px; font-size: 0.85rem; color: #78350f; margin-bottom: 10px; }
+    .photo-thumb { width: 100%; max-height: 220px; object-fit: cover; border-radius: 8px; margin-bottom: 8px; display: none; cursor: pointer; }
+    .map-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+    .map-btn { display: block; padding: 10px; border-radius: 8px; text-align: center; font-weight: 700; font-size: 0.85rem; text-decoration: none; cursor: pointer; border: none; width: 100%; }
+    .btn-google { background: #4285f4; color: #fff; }
+    .btn-kakao  { background: #FEE500; color: #3C1E1E; }
+    .kakao-map-wrap { display: none; margin-bottom: 10px; border-radius: 10px; overflow: hidden; border: 1.5px solid #e2e8f0; }
+    .kakao-map-container { width: 100%; height: 260px; }
+    .heading-badge { display: inline-block; background: #1e3a8a; color: #fff; border-radius: 6px; padding: 2px 8px; font-size: 0.75rem; font-weight: 700; margin-left: 4px; }
+    .dev-badge { display: inline-block; background: #7c3aed; color: #fff; border-radius: 6px; padding: 2px 8px; font-size: 0.72rem; font-weight: 700; margin-left: 4px; }
+    .rpm-section { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 9px; padding: 10px 12px; margin-bottom: 10px; }
+    .rpm-section h4 { margin: 0 0 8px; font-size: 0.82rem; color: #1d4ed8; }
+    .loading { text-align: center; padding: 40px 20px; color: #64748b; }
+    .spinner { width: 32px; height: 32px; border: 3px solid #e2e8f0; border-top-color: #3b82f6; border-radius: 50%; animation: spin .7s linear infinite; margin: 0 auto 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-msg { background: #fee2e2; color: #7f1d1d; border-radius: 10px; padding: 16px; text-align: center; margin: 12px 0; }
+    .empty-msg { text-align: center; padding: 30px; color: #94a3b8; }
+    /* 언어 토글 */
+    .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .lang-toggle { display: inline-flex; border: 1px solid rgba(255,255,255,0.5); border-radius: 8px; overflow: hidden; }
+    .lang-btn { padding: 5px 11px; background: transparent; border: none; font-size: 0.78rem; font-weight: 700; color: #cbd5e1; cursor: pointer; font-family: inherit; }
+    .lang-btn.active { background: #fff; color: #1e3a8a; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div class="lang-toggle">
+      <button type="button" class="lang-btn active" id="langKo" onclick="setLang('ko')">한글</button>
+      <button type="button" class="lang-btn" id="langEn" onclick="setLang('en')">EN</button>
+    </div>
+    <button class="refresh-btn" onclick="loadData()" data-ko="🔄 새로고침" data-en="🔄 Refresh">🔄 새로고침</button>
+  </div>
+  <h1 data-ko="🌊 농수로 현장 조회" data-en="🌊 Field Data Review">🌊 농수로 현장 조회</h1>
+  <div class="header-meta" id="lastUpdate">불러오는 중…</div>
+</div>
+
+<div class="summary-grid">
+  <div class="stat-card"><div class="num" id="statTotal">-</div><div class="lbl" data-ko="전체 측정" data-en="Total">전체 측정</div></div>
+  <div class="stat-card ok"><div class="num" id="statOk">-</div><div class="lbl" data-ko="✔ 적합" data-en="✔ Pass">✔ 적합</div></div>
+  <div class="stat-card warn"><div class="num" id="statWarn">-</div><div class="lbl" data-ko="⚠ 재측 필요" data-en="⚠ Re-measure">⚠ 재측 필요</div></div>
+</div>
+
+<div class="filter-bar">
+  <input type="text" id="filterText" placeholder="🔍 수로ID 검색…" data-ko-ph="🔍 수로ID 검색…" data-en-ph="🔍 Search Channel ID…" oninput="renderCards()">
+  <select id="filterJudge" onchange="renderCards()">
+    <option value="" data-ko="전체" data-en="All">전체</option>
+    <option value="ok" data-ko="✔ 적합만" data-en="✔ Pass only">✔ 적합만</option>
+    <option value="warn" data-ko="⚠ 재측만" data-en="⚠ Re-measure only">⚠ 재측만</option>
+  </select>
+</div>
+
+<div id="dataContainer">
+  <div class="loading"><div class="spinner"></div>데이터 불러오는 중…</div>
+</div>
+
+<script>
+  const CSV_URL = "https://raw.githubusercontent.com/swkim-crypto/HanGeum_River/main/data.csv";
+  const REPO = "swkim-crypto/HanGeum_River";
+
+  // 조회는 서버를 거치지 않고 GitHub을 직접 읽는다(콜드스타트 없음, 즉시 반영).
+  // 1순위 Contents API(커밋 즉시 반영), 실패 시 raw 폴백(~5분 캐시 가능).
+  async function fetchFresh(file) {
+    try {
+      const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${file}?ref=main&t=${Date.now()}`,
+                            { headers: { "Accept": "application/vnd.github.raw" }, cache: "no-store" });
+      if (r.ok) return await r.text();
+    } catch (e) { /* API 실패 → raw 폴백 */ }
+    const r2 = await fetch(`https://raw.githubusercontent.com/${REPO}/main/${file}?t=${Date.now()}`, { cache: "no-store" });
+    if (!r2.ok) throw new Error("HTTP " + r2.status);
+    return await r2.text();
+  }
+  const n_coeff = 0.025, S_slope = 0.001, ERR_THR = 10;
+  let allRows = [];
+  const activeMaps = {};
+  let lastUpdateTime = null;
+
+  /* ── 다국어 (한/영/아랍) ── */
+  let lang = "ko";
+  const T = {
+    ko: {
+      loadingMeta:"불러오는 중…", updated:"업데이트: ", loadFail:"불러오기 실패",
+      loading:"데이터 불러오는 중…", errLoad:"❌ 데이터를 불러올 수 없습니다.", empty:"조건에 맞는 데이터가 없습니다.",
+      rpmTitle:"🔢 rpm 측정값 (한경대) → 유속 환산", warn:"⚠ 재측 필요", ok:"✔ 적합",
+      mWidth:"수로 폭 B", mDepth:"수심 H", mHeight:"높이 H'", mQ:"실측 유량 Q",
+      vel1:"1차", vel2:"2차", vel3:"3차", avg:"평균",
+      mannTitle:"📐 매닝 계산", aA:"단면적 A", aP:"윤변 P", aR:"경심 R", aQm:"매닝 유량 Qm", aQ:"실측 유량 Q",
+      errLabel:"오차율", errWarn:"— 재측정 검토 필요", errOk:"— 측정값 신뢰 가능",
+      mapGoogle:"🗺 구글맵", mapKakao:"🗺 카카오맵", headingLabel:"방위각", photoTitle:"📷 현장 사진 ({n}장)"
+    },
+    en: {
+      loadingMeta:"Loading…", updated:"Updated: ", loadFail:"Load failed",
+      loading:"Loading data…", errLoad:"❌ Could not load data.", empty:"No matching data.",
+      rpmTitle:"🔢 RPM readings (Hankyong) → velocity", warn:"⚠ Re-measure", ok:"✔ Pass",
+      mWidth:"Width B", mDepth:"Depth H", mHeight:"Height H'", mQ:"Measured Q",
+      vel1:"1st", vel2:"2nd", vel3:"3rd", avg:"Avg",
+      mannTitle:"📐 Manning calc.", aA:"Area A", aP:"Wetted P", aR:"Hyd. R", aQm:"Manning Qm", aQ:"Measured Q",
+      errLabel:"Error", errWarn:"— review / re-measure", errOk:"— within tolerance",
+      mapGoogle:"🗺 Google Maps", mapKakao:"🗺 Kakao Map", headingLabel:"Heading", photoTitle:"📷 Site photos ({n})"
+    }
+  };
+  const t = k => T[lang][k];
+
+  const DIRS = {
+    ko: ["북","북북동","북동","동북동","동","동남동","남동","남남동","남","남남서","남서","서남서","서","서북서","북서","북북서"],
+    en: ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"]
+  };
+  function devName(d) {
+    if (!d) return "";
+    if (lang === "ko") return d;
+    return ({ "삼안":"SAMAN", "한경대":"Hankyong" })[d] || d;
+  }
+  function localeFor() { return lang === "ko" ? "ko-KR" : (lang === "ar" ? "ar-SA" : "en-US"); }
+  function setLastUpdateLabel() {
+    const el = document.getElementById("lastUpdate");
+    if (lastUpdateTime === "fail") el.textContent = t("loadFail");
+    else if (lastUpdateTime instanceof Date) el.textContent = t("updated") + lastUpdateTime.toLocaleString(localeFor());
+    else el.textContent = t("loadingMeta");
+  }
+
+  function setLang(l) {
+    lang = l;
+    ["ko","en"].forEach(x => {
+      const b = document.getElementById("lang" + x.charAt(0).toUpperCase() + x.slice(1));
+      if (b) b.classList.toggle("active", x === l);
+    });
+    document.documentElement.lang = l;
+    document.querySelectorAll("[data-ko]").forEach(el => {
+      el.textContent = el.getAttribute("data-" + l) || el.getAttribute("data-ko");
+    });
+    document.querySelectorAll("[data-ko-ph]").forEach(el => {
+      el.placeholder = el.getAttribute("data-" + l + "-ph") || el.getAttribute("data-ko-ph");
+    });
+    setLastUpdateLabel();
+    if (allRows.length) renderCards();
+  }
+
+  // 컬럼: 조사일자,농수로ID,수로폭,수심,높이,유속1,유속2,유속3,평균유속,촬영방위각,특이사항,위도,경도,사진링크,장비,rpm1,rpm2,rpm3,n1,n2,n3
+  function parseCSV(text) {
+    text = text.replace(/^\uFEFF/, "");
+    const lines = text.trim().split("\n").filter(l => l.trim());
+    if (lines.length < 2) return [];
+    return lines.slice(1).map(line => {
+      const c = line.split(",");
+      return {
+        date:     (c[0]  || "").trim(),
+        id:       (c[1]  || "").trim(),
+        width:    parseFloat(c[2])  || 0,
+        depth:    parseFloat(c[3])  || 0,
+        height:   parseFloat(c[4])  || 0,
+        v1:       parseFloat(c[5])  || 0,
+        v2:       parseFloat(c[6])  || 0,
+        v3:       parseFloat(c[7])  || 0,
+        velocity: parseFloat(c[8])  || 0,
+        heading:  parseFloat(c[9])  || 0,
+        memo:     (c[10] || "").trim(),
+        lat:      (c[11] || "").trim(),
+        lng:      (c[12] || "").trim(),
+        photo:    (c[13] || "").trim(),
+        device:   (c[14] || "").trim(),
+        rpm1:     (c[15] || "").trim(),
+        rpm2:     (c[16] || "").trim(),
+        rpm3:     (c[17] || "").trim(),
+        n1:       (c[18] || "").trim(),
+        n2:       (c[19] || "").trim(),
+        n3:       (c[20] || "").trim(),
+      };
+    }).filter(r => r.id);
+  }
+
+  function manning(r) {
+    const A = r.width*r.depth, P = r.width+2*r.depth, R = P>0?A/P:0;
+    const Q = A*r.velocity;
+    const Qm = (1/n_coeff)*A*Math.pow(R,2/3)*Math.pow(S_slope,0.5);
+    const errPct = Qm>0?((Q-Qm)/Qm)*100:0;
+    return { A, P, R, Q, Qm, errPct, isWarn: Math.abs(errPct)>ERR_THR };
+  }
+
+  function headingToDir(deg) {
+    return DIRS[lang][Math.round(deg/22.5)%16];
+  }
+
+  async function loadData() {
+    document.getElementById("dataContainer").innerHTML = '<div class="loading"><div class="spinner"></div>' + t("loading") + '</div>';
+    lastUpdateTime = null; setLastUpdateLabel();
+    try {
+      allRows = parseCSV(await fetchFresh("data.csv")).reverse();
+      lastUpdateTime = new Date(); setLastUpdateLabel();
+      updateSummary(); renderCards();
+    } catch(e) {
+      document.getElementById("dataContainer").innerHTML =
+        `<div class="error-msg">${t("errLoad")}<br><small>${e.message}</small></div>`;
+      lastUpdateTime = "fail"; setLastUpdateLabel();
+    }
+  }
+
+
+  function updateSummary() {
+    const warn = allRows.filter(r => manning(r).isWarn).length;
+    document.getElementById("statTotal").textContent = allRows.length;
+    document.getElementById("statOk").textContent    = allRows.length - warn;
+    document.getElementById("statWarn").textContent  = warn;
+  }
+
+  function renderCards() {
+    const ft = document.getElementById("filterText").value.trim().toLowerCase();
+    const fj = document.getElementById("filterJudge").value;
+    const rows = allRows.filter(r => {
+      if (ft && !r.id.toLowerCase().includes(ft)) return false;
+      if (fj) { const w=manning(r).isWarn; if(fj==="warn"&&!w) return false; if(fj==="ok"&&w) return false; }
+      return true;
+    });
+    if (!rows.length) {
+      document.getElementById("dataContainer").innerHTML = '<div class="empty-msg">' + t("empty") + '</div>';
+      return;
+    }
+    document.getElementById("dataContainer").innerHTML = rows.map((r,i) => buildCard(r,i)).join("");
+  }
+
+  function buildCard(r, idx) {
+    const m = manning(r);
+    const cardId = "card-"+idx;
+    const mapId  = "kmap-"+idx;
+    const hBadge = r.heading > 0
+      ? `<span class="heading-badge">↑ ${r.heading}° ${headingToDir(r.heading)}</span>` : "";
+    const isHan  = r.device === "한경대" || !!(r.rpm1 || r.rpm2 || r.rpm3);
+    const devBadge = r.device ? `<span class="dev-badge">${devName(r.device)}</span>` : "";
+    const rpmBlock = isHan ? `
+        <div class="rpm-section">
+          <h4>${t("rpmTitle")}</h4>
+          <div class="velocity-row">
+            <div><div class="vl">rpm1</div><div class="vv">${r.rpm1||'—'}</div></div>
+            <div><div class="vl">rpm2</div><div class="vv">${r.rpm2||'—'}</div></div>
+            <div><div class="vl">rpm3</div><div class="vv">${r.rpm3||'—'}</div></div>
+          </div>
+          <div class="velocity-row" style="margin-top:6px;">
+            <div><div class="vl">n1</div><div class="vv">${r.n1||'—'}</div></div>
+            <div><div class="vl">n2</div><div class="vv">${r.n2||'—'}</div></div>
+            <div><div class="vl">n3</div><div class="vv">${r.n3||'—'}</div></div>
+          </div>
+        </div>` : "";
+    const googleUrl = `https://maps.google.com/?q=${r.lat},${r.lng}`;
+    const photos = (r.photo || "").split(";").map(u => u.trim()).filter(Boolean);
+    const photoBlock = photos.length ? `
+        <div class="photo-section">
+          <h4>${t("photoTitle").replace("{n}", photos.length)}</h4>
+          <div class="photo-gallery">
+            ${photos.map(u => `<a href="${u}" target="_blank" class="pg-item"><img src="${u}" loading="lazy" onerror="this.parentElement.style.display='none'"></a>`).join("")}
+          </div>
+        </div>` : "";
+
+    return `
+    <div class="data-card">
+      <div class="card-header" onclick="toggleCard('${cardId}')">
+        <div>
+          <div class="ch-id">${r.id}${devBadge}${hBadge}</div>
+          <div class="ch-time">${r.date}</div>
+        </div>
+        <span class="badge ${m.isWarn?'badge-warn':'badge-ok'}">${m.isWarn?t("warn"):t("ok")}</span>
+      </div>
+      <div class="card-body" id="${cardId}">
+        <div class="measure-grid">
+          <div><div class="m-label">${t("mWidth")}</div><div class="m-val">${r.width.toFixed(3)} m</div></div>
+          <div><div class="m-label">${t("mDepth")}</div><div class="m-val">${r.depth.toFixed(3)} m</div></div>
+          <div><div class="m-label">${t("mHeight")}</div><div class="m-val">${r.height.toFixed(3)} m</div></div>
+          <div><div class="m-label">${t("mQ")}</div><div class="m-val">${m.Q.toFixed(4)} m³/s</div></div>
+        </div>
+        <div class="velocity-row">
+          <div><div class="vl">${t("vel1")}</div><div class="vv">${r.v1.toFixed(3)}</div></div>
+          <div><div class="vl">${t("vel2")}</div><div class="vv">${r.v2.toFixed(3)}</div></div>
+          <div><div class="vl">${t("vel3")}</div><div class="vv">${r.v3.toFixed(3)}</div></div>
+          <div class="avg-col"><div class="vl">${t("avg")}</div><div class="vv">${r.velocity.toFixed(3)} m/s</div></div>
+        </div>
+        ${rpmBlock}
+        ${r.memo?`<div class="memo-box">📝 ${r.memo}</div>`:""}
+        <div class="manning-section">
+          <h4>${t("mannTitle")} (n=${n_coeff}, S=1/${Math.round(1/S_slope)})</h4>
+          <div class="manning-grid">
+            <div class="mg-item"><div class="mg-lbl">${t("aA")}</div><div class="mg-val">${m.A.toFixed(3)} m²</div></div>
+            <div class="mg-item"><div class="mg-lbl">${t("aP")}</div><div class="mg-val">${m.P.toFixed(3)} m</div></div>
+            <div class="mg-item"><div class="mg-lbl">${t("aR")}</div><div class="mg-val">${m.R.toFixed(4)} m</div></div>
+            <div class="mg-item" style="grid-column:1/3"><div class="mg-lbl">${t("aQm")}</div><div class="mg-val">${m.Qm.toFixed(4)} m³/s</div></div>
+            <div class="mg-item"><div class="mg-lbl">${t("aQ")}</div><div class="mg-val">${m.Q.toFixed(4)} m³/s</div></div>
+          </div>
+          <div class="err-row ${m.isWarn?'err-warn':'err-ok'}">
+            ${t("errLabel")} ${m.errPct.toFixed(1)}% ${m.isWarn?t("errWarn"):t("errOk")}
+          </div>
+        </div>
+        ${photoBlock}
+        ${r.lat&&r.lng?`
+        <div class="map-buttons">
+          <a class="map-btn btn-google" href="${googleUrl}" target="_blank">${t("mapGoogle")}</a>
+          <button class="map-btn btn-kakao" onclick="toggleKakao('${mapId}',${r.lat},${r.lng},${r.heading})">${t("mapKakao")}</button>
+        </div>
+        <div class="kakao-map-wrap" id="wrap-${mapId}">
+          <div class="kakao-map-container" id="${mapId}"></div>
+        </div>`:""}
+      </div>
+    </div>`;
+  }
+
+  function toggleCard(id) {
+    document.getElementById(id).classList.toggle("open");
+  }
+
+  function toggleKakao(mapId, lat, lng, heading) {
+    const wrap = document.getElementById("wrap-"+mapId);
+    // 토글
+    if (wrap.style.display === "block") {
+      wrap.style.display = "none";
+      return;
+    }
+    wrap.style.display = "block";
+
+    // 이미 생성된 지도면 스킵
+    if (activeMaps[mapId]) return;
+
+    const container = document.getElementById(mapId);
+    const center    = new kakao.maps.LatLng(lat, lng);
+
+    const map = new kakao.maps.Map(container, {
+      center: center,
+      level:  4
+    });
+
+    // 기본 마커
+    new kakao.maps.Marker({ position: center, map: map });
+
+    // 방위각 화살표 커스텀 오버레이
+    const arrowHtml = `
+      <div style="
+        width:36px; height:36px;
+        background:#1e3a8a; border:3px solid #fff;
+        border-radius:50%; display:flex; align-items:center; justify-content:center;
+        box-shadow:0 2px 8px rgba(0,0,0,0.4);
+        transform:rotate(${heading}deg);
+        font-size:20px; color:#fff; line-height:1; margin-left:-18px; margin-top:-18px;
+      ">↑</div>`;
+
+    new kakao.maps.CustomOverlay({
+      content:  arrowHtml,
+      position: center,
+      zIndex:   4
+    }).setMap(map);
+
+    // 인포윈도우
+    const info = new kakao.maps.InfoWindow({
+      content: `<div style="padding:6px 10px;font-size:12px;line-height:1.6;">
+        <b>${lat}, ${lng}</b><br>
+        ${t("headingLabel")}: ${heading}° (${headingToDir(heading)})
+      </div>`,
+      removable: true
+    });
+
+    kakao.maps.event.addListener(
+      new kakao.maps.Marker({ position: center, map: map }),
+      'click', () => info.open(map, this)
+    );
+
+    activeMaps[mapId] = map;
+  }
+
+  loadData();
+</script>
+</body>
+</html>

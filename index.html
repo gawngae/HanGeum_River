@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>농어촌공사 유속 측정 시스템</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 12px; background: #f0f4f8; color: #2d3748; font-size: 16px; }
+    .card { background: #fff; padding: 18px; border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 14px; }
+    h2 { margin: 0 0 14px; color: #1e3a8a; font-size: 1.15rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
+    h3 { margin: 0 0 10px; color: #276749; font-size: 1rem; }
+    .form-group { margin-bottom: 13px; }
+    label { display: block; font-weight: 600; margin-bottom: 5px; font-size: 0.88rem; color: #4a5568; }
+    input[type="text"], input[type="number"], textarea {
+      width: 100%; padding: 13px 12px; border: 1.5px solid #cbd5e1;
+      border-radius: 9px; font-size: 1rem; background: #f8fafc; font-family: inherit;
+    }
+    textarea { resize: vertical; min-height: 70px; }
+    input:focus, textarea:focus { outline: none; border-color: #3b82f6; background: #fff; }
+    .velocity-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+    .velocity-grid input { padding: 11px 8px; text-align: center; }
+    .avg-display { background: #eff6ff; border: 1.5px solid #93c5fd; border-radius: 9px; padding: 10px 14px; font-size: 0.9rem; color: #1e3a8a; font-weight: 700; text-align: center; }
+    #manningBox { display: none; background: #ecfdf5; border: 1.5px solid #6ee7b7; border-radius: 10px; padding: 14px 16px; margin-top: 12px; }
+    .manning-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; font-size: 0.9rem; }
+    .manning-grid .label { color: #047857; font-weight: 600; }
+    .manning-grid .val   { color: #064e3b; font-weight: 700; font-family: monospace; }
+    .section-label { font-size: 0.78rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; margin-top: 4px; }
+
+    /* 사진 촬영 영역 */
+    .photo-area { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 16px; text-align: center; background: #f8fafc; cursor: pointer; transition: border-color .2s; }
+    .photo-area:hover { border-color: #3b82f6; }
+    .photo-area.has-photo { border-style: solid; border-color: #059669; background: #f0fdf4; }
+    .photo-icon { font-size: 2.5rem; margin-bottom: 6px; }
+    .photo-label-text { font-size: 0.9rem; color: #64748b; font-weight: 600; }
+    #photoPreview { display: none; width: 100%; max-height: 200px; object-fit: cover; border-radius: 8px; margin-top: 10px; }
+
+    /* GPS 상태 표시 (팝업용, 평소엔 숨김) */
+    .gps-status-bar { background: #f1f5f9; padding: 8px 12px; border-radius: 8px; font-size: 0.82rem; font-family: monospace; color: #475569; margin-top: 8px; display: none; }
+    .gps-ok  { color: #065f46; font-weight: 700; }
+    .gps-bad { color: #b91c1c; font-weight: 700; }
+
+    /* 확인 팝업 오버레이 */
+    .popup-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.55); z-index: 1000;
+      align-items: center; justify-content: center; padding: 20px;
+    }
+    .popup-overlay.open { display: flex; }
+    .popup-box {
+      background: #fff; border-radius: 16px; width: 100%; max-width: 380px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.25); overflow: hidden;
+    }
+    .popup-header { background: #1e3a8a; color: #fff; padding: 14px 18px; font-weight: 700; font-size: 1rem; }
+    .popup-body { padding: 16px 18px; }
+    .popup-photo { width: 100%; max-height: 160px; object-fit: cover; border-radius: 8px; margin-bottom: 14px; }
+    .popup-info-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 0.88rem; }
+    .popup-info-row:last-child { border-bottom: none; }
+    .popup-info-icon { font-size: 1.1rem; width: 24px; text-align: center; flex-shrink: 0; }
+    .popup-info-label { color: #64748b; width: 70px; flex-shrink: 0; }
+    .popup-info-val { font-weight: 700; color: #1e293b; font-family: monospace; }
+    .popup-info-val.loading { color: #94a3b8; font-style: italic; font-family: inherit; }
+    .popup-info-val.ready  { color: #059669; }
+    .popup-info-val.error  { color: #dc2626; }
+
+    /* 팝업 나침반 */
+    .popup-compass { display: flex; align-items: center; gap: 10px; }
+    .compass-circle { width: 36px; height: 36px; border-radius: 50%; background: #1e3a8a; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .compass-arrow { font-size: 20px; color: #fff; transition: transform 0.3s; display: inline-block; }
+
+    .popup-footer { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 14px 18px; background: #f8fafc; }
+    .btn-cancel  { background: #e2e8f0; color: #475569; border: none; padding: 13px; border-radius: 9px; font-weight: 700; font-size: 0.95rem; cursor: pointer; }
+    .btn-confirm { background: #1d4ed8; color: #fff; border: none; padding: 13px; border-radius: 9px; font-weight: 700; font-size: 0.95rem; cursor: pointer; transition: background .2s; }
+    .btn-confirm:disabled { background: #93c5fd; cursor: not-allowed; }
+    .btn-confirm.ready { background: #059669; }
+
+    /* 전송 상태 */
+    #statusMsg { display: none; text-align: center; padding: 13px; border-radius: 9px; font-weight: 600; font-size: 0.95rem; margin-top: 10px; }
+    .msg-loading { background: #fef9c3; color: #713f12; }
+    .msg-ok      { background: #dcfce7; color: #14532d; }
+    .msg-err     { background: #fee2e2; color: #7f1d1d; }
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #fde68a; border-top-color: #92400e; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 6px; }
+    .spinner-sm { display: inline-block; width: 12px; height: 12px; border: 2px solid #cbd5e1; border-top-color: #3b82f6; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 4px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* 사용 장비 토글 */
+    .device-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .device-btn { padding: 12px; border: 1.5px solid #cbd5e1; border-radius: 9px; background: #f8fafc; font-size: 0.95rem; font-weight: 700; color: #64748b; cursor: pointer; font-family: inherit; transition: all .15s; }
+    .device-btn.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+    /* rpm 환산 결과 표시 */
+    .rpm-readout { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 8px 0; text-align: center; }
+    .rpm-readout > div { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 6px 4px; }
+    .rpm-readout .rl { display: block; font-size: 0.72rem; color: #64748b; margin-bottom: 2px; }
+    /* 바로 전송 버튼 */
+    .btn-send-direct { width: 100%; padding: 15px; background: #1d4ed8; color: #fff; border: none; border-radius: 11px; font-size: 1.05rem; font-weight: 800; font-family: inherit; cursor: pointer; transition: background .15s; margin-top: 4px; }
+    .btn-send-direct:hover { background: #1e40af; }
+    .btn-send-direct:active { background: #1e3a8a; }
+    .send-hint { font-size: 0.75rem; color: #94a3b8; text-align: center; margin: 8px 2px 0; line-height: 1.5; }
+    /* 언어 토글 + 로고 + 타이틀 */
+    .topbar { display: flex; justify-content: flex-end; margin-bottom: 6px; }
+    .lang-toggle { display: inline-flex; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; }
+    .lang-btn { padding: 4px 11px; background: #f8fafc; border: none; font-size: 0.72rem; font-weight: 700; color: #64748b; cursor: pointer; font-family: inherit; }
+    .lang-btn.active { background: #1d4ed8; color: #fff; }
+    .title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .title-row h2 { margin: 0; flex: 1; min-width: 0; }
+    .brand-logo { height: 30px; width: auto; flex-shrink: 0; }
+    /* 삼안 버튼 안에 로고가 들어갈 경우 대비 */
+    .device-btn img { width: 95%; height: auto; display: block; margin: 0 auto; }
+    /* 다중 사진 촬영 */
+    .thumb-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .thumb-row .thumb { position: relative; width: 62px; height: 62px; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; }
+    .thumb-row .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .thumb-row .thumb .del { position: absolute; top: 0; right: 0; background: rgba(0,0,0,0.55); color: #fff; border: none; width: 20px; height: 20px; font-size: 12px; line-height: 1; cursor: pointer; border-radius: 0 0 0 7px; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <div class="title-row">
+    <h2 data-ko="유속데이터 실측" data-en="Flow Velocity Measurement">유속데이터 실측</h2>
+    <div class="lang-toggle">
+      <button type="button" class="lang-btn active" id="langKo" onclick="setLang('ko')">한글</button>
+      <button type="button" class="lang-btn" id="langEn" onclick="setLang('en')">EN</button>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label data-ko="농수로 ID" data-en="Channel ID">농수로 ID</label>
+    <input type="text" id="channelId" placeholder="예: CH-001" data-ko-ph="예: CH-001" data-en-ph="e.g. CH-001" required>
+  </div>
+
+  <div class="section-label" data-ko="📐 수로 단면" data-en="📐 Cross-section">📐 수로 단면</div>
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:13px;">
+    <div><label data-ko="수로폭 B (m)" data-en="Width B (m)">수로폭 B (m)</label><input type="number" id="width" step="0.001" placeholder="0.000" oninput="updateManning()"></div>
+    <div><label data-ko="높이 H&#39; (m)" data-en="Height H&#39; (m)">높이 H' (m)</label><input type="number" id="height" step="0.001" placeholder="0.000"></div>
+    <div><label data-ko="수심 H (m)" data-en="Depth H (m)">수심 H (m)</label><input type="number" id="depth" step="0.001" placeholder="0.000" oninput="updateManning()"></div>
+  </div>
+
+  <!-- 사용 장비 선택 -->
+  <div class="form-group">
+    <label data-ko="사용 장비 (유속계)" data-en="Device (current meter)">사용 장비 (유속계)</label>
+    <div class="device-toggle">
+      <button type="button" class="device-btn active" id="devSaman" onclick="setDevice('saman')"><img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAAqAKkDASIAAhEBAxEB/8QAHAAAAgIDAQEAAAAAAAAAAAAAAAYEBwEDBQII/8QAOBAAAQMDAgUCBAMFCQAAAAAAAQIDBAAFEQYSBxMhMVFBYQgUInEjMpEVQnLB0RZEUoGDsbLC4f/EABoBAQACAwEAAAAAAAAAAAAAAAABBQMEBgL/xAAnEQACAgECBQQDAQAAAAAAAAAAAQIDEQQFEiExQWEGIlFxI4Hh8f/aAAwDAQACEQMRAD8A+yqK87q59+u8OzW9ybNdCEJHQepPge9Y7bI1Rc5vCRMISnJRistmNQ3iFZLY5OmOJShP5Uk9Vn0A96iaQ1NB1HbvmIv4bqejrKjlSD/Me9Ujq/UU7UlxL72QygkNNDskf1qHYbrcLFckToa1IWnooeix4NcHb6xa1ntjmpcvL8nY1+l86XMpfk6+Pr+n0xWOmO1cHSOpIeorcJDCgl1IAdbJ6oP9Peu7uruqL6761ZW8p9GcjbVOqbhNYaPdFJnETiFZtFttNzEuSZjydzcdrvt7ZJ9BSrG4zOlbKpOkLmxHeUAl0/lwT3zisxjLdopf1nqiFpawm7zWnnW9yUJQ0MqKj2FV7J42LjJTIk6QubMVRwHVnAP6jFAXFRXC0fqe16psybpa3CpvJStChhSFDuCKTIXGWxuXybbpkN+G3D5u99awQdhxgDyaAtCiqbj8ebQu5pZds8pqKpWOcVgkDziulrHjNYrJMESBGcuiwkFa21hKE57DPqaAtKilPh3ra26zti5MNC2HmVBLzCzkoz2OfUGlu+cW2ol3lW22abuVyXFWW3Ftj6cjv2BoC0KKrbQ/Fq0aivCbPJhP22as7UJdOQpXj2NdbiVryLoliG7JguyxKUpIDagNuMefvQDnRVVXzjVY7fBiOR4T0uU+yl1bKVgBkEZAUfNMXDbX9s1rHf8AlWXI0qPgusrOTg9iD6igHOivO/2o3+1AQZMksxnXg2pwoQVBCe6sDOB71RupLvctU3hRfC2o7Siltjts+/vV0c2uFc7BDkTfnGUJbdUfxMDor3+9UG/7dqNbXGNcvanzXz/hcbNradLY5WR5vo/gQoFh+gfRWyXYPoP0VYzkGFbLeubPebjx2k7luLOABVM6+4qNOOrhaZYAbBIMp1PVX8Kf5mqiv01mGMFnPfcSzk9omy9J3FNwjPpZ2nCkqVhKx4Pmrx07dRdbNGuHIdYD6ArY4MEf+eKpbhZoaVeZTeptVqdeR0VGYdOd/hSgf3fAq6g4AAB0A7CrvZ9oe3KS420+3ZfRU7nuUdc0+DDXfuyoOP2j71OvbOpbUwuY0hlKHW2xuW2UkkHb6it2j+NMZzlW3VVuSwRhHzDScpH8SD2/y/Su7rLXt001qMxV6ffm24tpUl9kHOfUdsGqy1xJk8QtQRf2Jph+K4BtcdW3grz6qOMYFXZVF66z1Tp+xWJq6XUofYUQqOhKQsuKxkbQfb1qrtZ8RblqfRVwYY0XKbtriMCYpZKW8KHX8uP0NZ4y6Zun9jrAiIhyWm2NFt8IBJ6hP1Y8dDUNOp9Q6i0GdLWzTDqFNxQ2+8rIQEp6/SMdzigQwfDEvbpm7DP96H/GkTh9aIF74wyotxa5sdEmQ6Wz2UUrOAfamH4fLpIt8mXYJNulIVIUXQ8pBCU7U9Qc1C4VwprHF+ZJeiPttFcnC1NkJOVdOtAS/icixI82yLjR2mipp1KtiQMgFOO33NOcLTtmt3BmWhiE0pb1qW+44tIKlL5ZOc+xpU+JCLLmyLKYsV5/Yl7dy0FWOqPFPb6XTwpdj8tfNNnUnZjrnlHpjzUgRPhcXsevmTgbWv8AtTrO1sBcV2vStqTKklR3ubdqM56np3+5NInw/wAGewxf2nY70dbzKUtlxBT1wrzXJ0hqS/6L1BNYuViky1uDlgIQQQQehBx1BrQ1lOou4Y1S4V3eMvHjPJfZtaaymtuVkcvss8v2e7tLeRxZZiT7fFaubktrmyGf3CQMFPpnGK7nxKsrYtdmQuS9IPNcO5wjPYeBSdqheomNfxtUXSxvNKdcbkJZbBVhKcAJz5wKbuPC5V8sFgmRYMk8zc4WwglSMgdDisun0saejbfy23/DzdqJW9kl4SQ2cNdN2WHwxbeTDacfmw1OPuOJBUokHp9hSF8M6tmuLokHp8grp/qoqz9FhxrhrAYcQpDiYG0oIwQdp6Yqsvh8hzYms7k7JiPsoVCUApbZSCeYjzW2a59BcyjmVB5tHNqMHkg800c01HoqQJXGuxXnUNjZXb5Tq0xMqVDz0cHkeSPFJ3CXh6qW43e76wpMdJ3MR1jBcP8AiI8f71c1FRgnJvSsJSEpAAAwAPSs801HoqSDeXMjB6ihKwn8oA+wrRRQEjmmsJWE9gB9hWiigN4WASQACfArPNNR6KAkc00c01HooCRzTWCsE5IGfOK0UUBvUsK/MAfuKzzKj0UBI5po5pqPRQEjmmjmmo9FAf/Z" alt="SAMAN"></button>
+      <button type="button" class="device-btn" id="devHankyong" onclick="setDevice('hankyong')" data-ko="한경대" data-en="Hankyong">한경대</button>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <!-- 삼안: 유속 직접 입력 -->
+    <div id="velocityGroup">
+      <label data-ko="실측 유속 3회 (m/s)" data-en="Measured velocity ×3 (m/s)">실측 유속 3회 (m/s)</label>
+      <div class="velocity-grid">
+        <input type="number" id="v1" step="0.001" placeholder="1차" data-ko-ph="1차" data-en-ph="1st" oninput="updateVelocity()">
+        <input type="number" id="v2" step="0.001" placeholder="2차" data-ko-ph="2차" data-en-ph="2nd" oninput="updateVelocity()">
+        <input type="number" id="v3" step="0.001" placeholder="3차" data-ko-ph="3차" data-en-ph="3rd" oninput="updateVelocity()">
+      </div>
+    </div>
+
+    <!-- 한경대: rpm 입력 → 유속 자동 환산 -->
+    <div id="rpmGroup" style="display:none;">
+      <label data-ko="측정 rpm 3회 → 유속 자동 환산" data-en="Measured RPM ×3 → auto velocity">측정 rpm 3회 → 유속 자동 환산</label>
+      <div class="velocity-grid">
+        <input type="number" id="rpm1" step="0.1" placeholder="rpm 1차" data-ko-ph="rpm 1차" data-en-ph="RPM 1st" oninput="updateVelocity()">
+        <input type="number" id="rpm2" step="0.1" placeholder="rpm 2차" data-ko-ph="rpm 2차" data-en-ph="RPM 2nd" oninput="updateVelocity()">
+        <input type="number" id="rpm3" step="0.1" placeholder="rpm 3차" data-ko-ph="rpm 3차" data-en-ph="RPM 3rd" oninput="updateVelocity()">
+      </div>
+      <div class="rpm-readout">
+        <div><span class="rl" data-ko="1차 유속" data-en="1st V">1차 유속</span><span class="rv" id="conv1">—</span></div>
+        <div><span class="rl" data-ko="2차 유속" data-en="2nd V">2차 유속</span><span class="rv" id="conv2">—</span></div>
+        <div><span class="rl" data-ko="3차 유속" data-en="3rd V">3차 유속</span><span class="rv" id="conv3">—</span></div>
+      </div>
+      <div style="font-size:0.72rem;color:#6b7280;margin:0 0 8px;" data-ko="n = rpm ÷ 30 → 유속 환산식 적용" data-en="n = rpm ÷ 30 → velocity formula applied">n = rpm ÷ 30 → 유속 환산식 적용</div>
+    </div>
+
+    <div class="avg-display"><span data-ko="평균 유속" data-en="Average velocity">평균 유속</span>: <span id="avgDisplay">— m/s</span></div>
+  </div>
+
+  <div id="manningBox">
+    <h3 data-ko="📐 매닝 유량 미리보기" data-en="📐 Manning flow preview">📐 매닝 유량 미리보기</h3>
+    <div class="manning-grid">
+      <span class="label" data-ko="단면적 A" data-en="Area A">단면적 A</span><span class="val" id="mA">-</span>
+      <span class="label" data-ko="윤변 P" data-en="Wetted perim. P">윤변 P</span>   <span class="val" id="mP">-</span>
+      <span class="label" data-ko="경심 R" data-en="Hyd. radius R">경심 R</span>   <span class="val" id="mR">-</span>
+      <span class="label" data-ko="실측유량 Q" data-en="Measured Q">실측유량 Q</span><span class="val" id="mQ">-</span>
+      <span class="label" data-ko="매닝유량 Qm" data-en="Manning Qm">매닝유량 Qm</span><span class="val" id="mQm">-</span>
+      <span class="label" data-ko="오차율" data-en="Error %">오차율</span>   <span class="val" id="mErr">-</span>
+    </div>
+    <div style="font-size:0.75rem;color:#6b7280;margin-top:8px;" data-ko="n=0.025, S=1/1000 (기본값)" data-en="n=0.025, S=1/1000 (default)">n=0.025, S=1/1000 (기본값)</div>
+  </div>
+
+  <div class="form-group" style="margin-top:13px;">
+    <label data-ko="특이사항 메모" data-en="Remarks">특이사항 메모</label>
+    <textarea id="memo" placeholder="예: 수초 많음, 부유물 있음, 호안 손상 등" data-ko-ph="예: 수초 많음, 부유물 있음, 호안 손상 등" data-en-ph="e.g. heavy weeds, debris, bank damage"></textarea>
+  </div>
+
+  <!-- 현장 사진 (여러 장 → 로컬 저장 → 일괄 전송) -->
+  <div class="form-group">
+    <label data-ko="현장 사진 (여러 장 가능)" data-en="Site photos (multiple)">현장 사진 (여러 장 가능)</label>
+    <div class="photo-area" id="photoArea" onclick="document.getElementById('photo').click()">
+      <div class="photo-icon">📷</div>
+      <div class="photo-label-text" id="photoLabelText" data-ko="탭하여 사진 추가" data-en="Tap to add photo">탭하여 사진 추가</div>
+    </div>
+    <input type="file" id="photo" accept="image/*" capture="environment" style="display:none">
+    <div class="thumb-row" id="stagingThumbs"></div>
+  </div>
+
+  <button type="button" class="btn-send-direct" id="btnSendDirect" onclick="directUpload()" data-ko="📤 서버전송" data-en="📤 Send to server">📤 서버전송</button>
+  <div class="send-hint" data-ko="유속(또는 rpm)만 있으면 전송됩니다. 위에서 추가한 사진은 [서버전송] 시 측정값과 함께 올라갑니다." data-en="Measurements send instantly with just velocity (or RPM). Collect photos via [Finish photos] below and send them in a batch.">유속(또는 rpm)만 있으면 전송됩니다. 위에서 추가한 사진은 [서버전송] 시 측정값과 함께 올라갑니다.</div>
+
+  <div id="statusMsg"></div>
+</div>
+
+<div class="card" style="font-size:0.84rem; color:#64748b; line-height:1.8;">
+  <strong style="color:#1e3a8a;" data-ko="💡 사용 안내" data-en="💡 How to use">💡 사용 안내</strong><br>
+  <span data-ko="① ID·단면 입력 → ② 장비 선택(삼안=유속 / 한경대=rpm) → ③ 3회 측정 → ④ 메모 → ⑤ 서버전송" data-en="① ID &amp; section → ② Device (SAMAN=velocity / Hankyong=RPM) → ③ Measure ×3 → ④ Memo → ⑤ Send">① ID·단면 입력 → ② 장비 선택(삼안=유속 / 한경대=rpm) → ③ 3회 측정 → ④ 메모 → ⑤ 서버전송</span><br>
+  <span data-ko="📷 사진은 [탭하여 사진 추가]로 여러 장 담은 뒤 [서버전송]으로 측정값과 함께 전송" data-en="📷 Shoot multiple photos per site, tap [Finish photos] → then [Send all photos] when online">📷 사진은 [탭하여 사진 추가]로 여러 장 담은 뒤 [서버전송]으로 측정값과 함께 전송</span>
+</div>
+
+<!-- ── 확인 팝업 ──────────────────────────────────── -->
+<div class="popup-overlay" id="popupOverlay">
+  <div class="popup-box">
+    <div class="popup-header" data-ko="📍 위치·방향 확인 및 전송" data-en="📍 Confirm location &amp; send">📍 위치·방향 확인 및 전송</div>
+    <div class="popup-body">
+      <img class="popup-photo" id="popupPhoto" src="" alt="현장사진">
+
+      <div class="popup-info-row">
+        <span class="popup-info-icon">📍</span>
+        <span class="popup-info-label" data-ko="위도" data-en="Latitude">위도</span>
+        <span class="popup-info-val loading" id="popupLat"><span class="spinner-sm"></span>취득 중…</span>
+      </div>
+      <div class="popup-info-row">
+        <span class="popup-info-icon">📍</span>
+        <span class="popup-info-label" data-ko="경도" data-en="Longitude">경도</span>
+        <span class="popup-info-val loading" id="popupLng"><span class="spinner-sm"></span>취득 중…</span>
+      </div>
+      <div class="popup-info-row">
+        <span class="popup-info-icon">🧭</span>
+        <span class="popup-info-label" data-ko="촬영방향" data-en="Direction">촬영방향</span>
+        <div class="popup-compass">
+          <div class="compass-circle"><span class="compass-arrow" id="popupArrow">↑</span></div>
+          <span class="popup-info-val loading" id="popupHeading"><span class="spinner-sm"></span>취득 중…</span>
+        </div>
+      </div>
+    </div>
+    <div class="popup-footer">
+      <button class="btn-cancel" onclick="closePopup()" data-ko="✕ 취소" data-en="✕ Cancel">✕ 취소</button>
+      <button class="btn-confirm" id="btnConfirm" disabled onclick="confirmAndUpload()">
+        <span id="btnConfirmText">⏳ 좌표 취득 중…</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SERVER_URL = "https://hangeum-river.onrender.com/upload";
+  const n = 0.025, S = 0.001;
+
+  let currentLat     = null;
+  let currentLng     = null;
+  let currentHeading = null;
+  let gpsReady       = false;
+  let orientationListener = null;
+
+  /* ── 다국어 (한/영) ── */
+  let lang = "ko";
+  const T = {
+    ko: {
+      photoTap: "탭하여 사진 촬영", photoSelected: "✔ 사진 선택됨 (탭하여 변경)",
+      acquiring: "취득 중…", acqFail: "취득 실패",
+      confirmAcq: "⏳ 좌표 취득 중…", confirmReady: "✔ 확인 및 전송", confirmNoGps: "⚠ GPS 없이 전송",
+      locating: "📍 좌표 취득 중…", sending: "서버 전송 중… (최대 40초)",
+      sentOk: "✅ 전송 완료!", serverErr: "❌ 서버 오류: ", netErr: "❌ 전송 실패: 네트워크를 확인하세요.",
+      unknownErr: "알 수 없는 오류", needVel: "유속을 최소 1회 입력해주세요.", needRpm: "rpm을 최소 1회 입력해주세요.",
+      photoNeedId: "사진 저장에는 농수로 ID가 필요합니다.", photoSaving: "저장 중…", photoDone: "📸 사진종료 (이 지점 저장)",
+      photoSaved: "이 지점 사진을 저장했습니다. 다음 지점을 진행하세요.", photoSaveFail: "사진 저장 실패.",
+      queueEmpty: "대기 중인 사진 없음", queuePending: "대기 중: {n}장 ({m}개 지점)",
+      batchProgress: "전송 중… {k}/{n}", batchDone: "✅ 전송 {ok}장 완료, 실패 {fail}장",
+      batchPartial: "✅ {ok}장 전송됨 · {fail}장 남음 — [사진 일괄 전송]을 다시 누르면 남은 것만 재시도합니다."
+    },
+    en: {
+      photoTap: "Tap to take photo", photoSelected: "✔ Photo selected (tap to change)",
+      acquiring: "Acquiring…", acqFail: "Failed",
+      confirmAcq: "⏳ Acquiring location…", confirmReady: "✔ Confirm & Send", confirmNoGps: "⚠ Send without GPS",
+      locating: "📍 Acquiring location…", sending: "Sending… (up to 40s)",
+      sentOk: "✅ Sent!", serverErr: "❌ Server error: ", netErr: "❌ Send failed: check your network.",
+      unknownErr: "Unknown error", needVel: "Enter at least one velocity.", needRpm: "Enter at least one RPM.",
+      photoNeedId: "Channel ID is required to save photos.", photoSaving: "Saving…", photoDone: "📸 Finish photos (save site)",
+      photoSaved: "Site photos saved. Continue to the next site.", photoSaveFail: "Failed to save photos.",
+      queueEmpty: "No pending photos", queuePending: "Pending: {n} photos ({m} sites)",
+      batchProgress: "Sending… {k}/{n}", batchDone: "✅ {ok} sent, {fail} failed",
+      batchPartial: "✅ {ok} sent · {fail} left — tap [Send all photos] again to retry the rest."
+    }
+  };
+  const t = k => T[lang][k];
+
+  function setLang(l) {
+    lang = l;
+    ["ko","en"].forEach(x => {
+      const btn = document.getElementById("lang" + x.charAt(0).toUpperCase() + x.slice(1));
+      if (btn) btn.classList.toggle("active", x === l);
+    });
+    document.documentElement.lang = l;
+    document.querySelectorAll("[data-ko]").forEach(el => {
+      el.textContent = el.getAttribute("data-" + l) || el.getAttribute("data-ko");
+    });
+    document.querySelectorAll("[data-ko-ph]").forEach(el => {
+      el.placeholder = el.getAttribute("data-" + l + "-ph") || el.getAttribute("data-ko-ph");
+    });
+  }
+
+  /* ── 나침반 시작 ── */
+  function startCompass() {
+    if (typeof DeviceOrientationEvent !== "undefined" &&
+        typeof DeviceOrientationEvent.requestPermission === "function") {
+      DeviceOrientationEvent.requestPermission()
+        .then(s => { if (s === "granted") listenOrientation(); })
+        .catch(console.error);
+    } else if (window.DeviceOrientationEvent) {
+      listenOrientation();
+    }
+  }
+
+  function listenOrientation() {
+    orientationListener = (e) => {
+      let deg = null;
+      if (e.webkitCompassHeading !== undefined) {
+        deg = e.webkitCompassHeading;
+      } else if (e.absolute && e.alpha !== null) {
+        deg = (360 - e.alpha) % 360;
+      } else if (e.alpha !== null) {
+        deg = (360 - e.alpha) % 360;
+      }
+      if (deg !== null) {
+        currentHeading = Math.round(deg);
+        // 팝업 화살표 실시간 업데이트
+        const arrow = document.getElementById("popupArrow");
+        if (arrow) arrow.style.transform = `rotate(${currentHeading}deg)`;
+      }
+    };
+    window.addEventListener("deviceorientationabsolute", orientationListener, true);
+    window.addEventListener("deviceorientation", orientationListener, true);
+  }
+
+  function headingToDir(deg) {
+    const dirs = ["북","북북동","북동","동북동","동","동남동","남동","남남동","남","남남서","남서","서남서","서","서북서","북서","북북서"];
+    return dirs[Math.round(deg / 22.5) % 16];
+  }
+
+  /* ── 사용 장비 ── */
+  let device = "saman";  // "saman" | "hankyong"
+
+  /* rpm → 유속 환산 (n = rpm/30) */
+  function rpmToVelocity(rpm) {
+    if (isNaN(rpm) || rpm <= 0) return null;
+    const nVal = rpm / 30;
+    return (nVal > 0 && nVal < 1.74)
+      ? 0.0123 + 0.2473 * nVal
+      : -0.0042 + 0.2568 * nVal;
+  }
+
+  function setDevice(d) {
+    device = d;
+    const isHan = (d === "hankyong");
+    document.getElementById("devSaman").classList.toggle("active", !isHan);
+    document.getElementById("devHankyong").classList.toggle("active", isHan);
+    document.getElementById("velocityGroup").style.display = isHan ? "none" : "block";
+    document.getElementById("rpmGroup").style.display     = isHan ? "block" : "none";
+    updateVelocity();
+  }
+
+  /* 현재 장비 기준 유속 3개 (한경대는 환산값) */
+  function currentVelocities() {
+    if (device === "hankyong") {
+      return ["rpm1","rpm2","rpm3"].map(id =>
+        rpmToVelocity(parseFloat(document.getElementById(id).value)));
+    }
+    return ["v1","v2","v3"].map(id => {
+      const v = parseFloat(document.getElementById(id).value);
+      return (isNaN(v) || v <= 0) ? null : v;
+    });
+  }
+
+  /* ── 평균 유속 ── */
+  function updateVelocity() {
+    const vels = currentVelocities();
+
+    // 한경대: 차수별 환산 유속 표시
+    if (device === "hankyong") {
+      ["conv1","conv2","conv3"].forEach((id,i) => {
+        document.getElementById(id).textContent =
+          vels[i] !== null ? vels[i].toFixed(3) + " m/s" : "—";
+      });
+    }
+
+    const valid = vels.filter(v => v !== null && !isNaN(v) && v > 0);
+    const avg = valid.length ? valid.reduce((a,b) => a+b, 0) / valid.length : null;
+    document.getElementById("avgDisplay").textContent = avg ? avg.toFixed(3) + " m/s" : "— m/s";
+    updateManning();
+  }
+
+  /* ── 매닝 미리보기 ── */
+  function updateManning() {
+    const B = parseFloat(document.getElementById("width").value);
+    const H = parseFloat(document.getElementById("depth").value);
+    const vals = currentVelocities().filter(v => v !== null && !isNaN(v) && v > 0);
+    const V = vals.length ? vals.reduce((a,b) => a+b, 0) / vals.length : 0;
+    const box = document.getElementById("manningBox");
+    if (!B || !H || !V) { box.style.display = "none"; return; }
+    const A = B*H, P = B+2*H, R = A/P, Q = A*V;
+    const Qm = (1/n)*A*Math.pow(R,2/3)*Math.pow(S,0.5);
+    const errPct = ((Q-Qm)/Qm)*100;
+    document.getElementById("mA").textContent  = A.toFixed(3)+" m²";
+    document.getElementById("mP").textContent  = P.toFixed(3)+" m";
+    document.getElementById("mR").textContent  = R.toFixed(4)+" m";
+    document.getElementById("mQ").textContent  = Q.toFixed(4)+" m³/s";
+    document.getElementById("mQm").textContent = Qm.toFixed(4)+" m³/s";
+    const errEl = document.getElementById("mErr");
+    errEl.textContent = errPct.toFixed(1)+"%" + (Math.abs(errPct)>10?" ⚠ 재측 검토":" ✔ 적합");
+    errEl.style.color = Math.abs(errPct)>10?"#dc2626":"#059669";
+    box.style.display = "block";
+  }
+
+  /* ── 다중 사진: 스테이징 + IndexedDB 큐 + 일괄 전송 ── */
+  let staging = [];            // 현재 측정에 첨부할 사진 [{blob,url}]
+
+  // 사진 추가 (탭마다 1장)
+  document.getElementById("photo").addEventListener("change", e => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    staging.push({ blob: file, url: URL.createObjectURL(file) });
+    renderStaging();
+  });
+
+  function renderStaging() {
+    const wrap = document.getElementById("stagingThumbs");
+    wrap.innerHTML = staging.map((s, i) =>
+      `<div class="thumb"><img src="${s.url}"><button type="button" class="del" onclick="removeStaging(${i})">✕</button></div>`).join("");
+    document.getElementById("photoArea").classList.toggle("has-photo", staging.length > 0);
+  }
+  function removeStaging(i) { URL.revokeObjectURL(staging[i].url); staging.splice(i, 1); renderStaging(); }
+
+  function openPopup() {
+    // 팝업 초기 상태
+    gpsReady = false;
+    currentLat = null; currentLng = null;
+
+    setPopupField("popupLat",     "loading", t("acquiring"));
+    setPopupField("popupLng",     "loading", t("acquiring"));
+    setPopupField("popupHeading", "loading", t("acquiring"));
+
+    const btn = document.getElementById("btnConfirm");
+    btn.disabled = true;
+    btn.className = "btn-confirm";
+    document.getElementById("btnConfirmText").textContent = t("confirmAcq");
+
+    document.getElementById("popupOverlay").classList.add("open");
+
+    // 나침반 시작
+    startCompass();
+
+    // GPS 취득
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        currentLat = pos.coords.latitude.toFixed(6);
+        currentLng = pos.coords.longitude.toFixed(6);
+
+        // GPS heading 보조 (이동 중일 때)
+        if (currentHeading === null && pos.coords.heading !== null && !isNaN(pos.coords.heading)) {
+          currentHeading = Math.round(pos.coords.heading);
+        }
+        if (currentHeading === null) currentHeading = 0;
+
+        setPopupField("popupLat", "ready", currentLat);
+        setPopupField("popupLng", "ready", currentLng);
+        setPopupField("popupHeading", "ready",
+          `${currentHeading}° (${headingToDir(currentHeading)})`);
+
+        document.getElementById("popupArrow").style.transform = `rotate(${currentHeading}deg)`;
+
+        // 확인 버튼 활성화
+        gpsReady = true;
+        btn.disabled = false;
+        btn.className = "btn-confirm ready";
+        document.getElementById("btnConfirmText").textContent = t("confirmReady");
+      },
+      err => {
+        setPopupField("popupLat",     "error", t("acqFail"));
+        setPopupField("popupLng",     "error", t("acqFail"));
+        setPopupField("popupHeading", "error", t("acqFail"));
+        // GPS 실패해도 수동 진행 허용
+        currentLat = "0"; currentLng = "0"; currentHeading = 0;
+        btn.disabled = false;
+        btn.className = "btn-confirm";
+        document.getElementById("btnConfirmText").textContent = t("confirmNoGps");
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  }
+
+  function setPopupField(id, state, text) {
+    const el = document.getElementById(id);
+    el.className = "popup-info-val " + state;
+    el.innerHTML = state === "loading"
+      ? `<span class="spinner-sm"></span>${text}`
+      : text;
+  }
+
+  function closePopup() {
+    document.getElementById("popupOverlay").classList.remove("open");
+    if (orientationListener) {
+      window.removeEventListener("deviceorientationabsolute", orientationListener, true);
+      window.removeEventListener("deviceorientation", orientationListener, true);
+      orientationListener = null;
+    }
+  }
+
+  /* ── 데이터 수집 (유속/rpm만 있으면 전송 가능) ── */
+  function collectFormData() {
+    const vels = currentVelocities();
+    const validVels = vels.filter(v => v !== null && !isNaN(v) && v > 0);
+    if (validVels.length === 0) {
+      return { ok:false, msg: device === "hankyong"
+        ? t("needRpm")
+        : t("needVel") };
+    }
+
+    const channelId = document.getElementById("channelId").value.trim();
+    const width  = document.getElementById("width").value  || "0";
+    const depth  = document.getElementById("depth").value  || "0";
+    const height = document.getElementById("height").value || "0";
+
+    // 최종 유속 3개 (한경대는 환산값, 빈 측정은 0)
+    const v1 = vels[0] !== null ? vels[0].toFixed(3) : "0";
+    const v2 = vels[1] !== null ? vels[1].toFixed(3) : "0";
+    const v3 = vels[2] !== null ? vels[2].toFixed(3) : "0";
+
+    // rpm / n — 한경대만 값, 삼안은 빈칸
+    let rpm1="", rpm2="", rpm3="", n1="", n2="", n3="";
+    if (device === "hankyong") {
+      const rv = ["rpm1","rpm2","rpm3"].map(id => parseFloat(document.getElementById(id).value));
+      [rpm1,rpm2,rpm3] = rv.map(r => (!isNaN(r) && r>0) ? r.toString() : "");
+      [n1,n2,n3]       = rv.map(r => (!isNaN(r) && r>0) ? (r/30).toFixed(4) : "");
+    }
+    const deviceName  = device === "hankyong" ? "한경대" : "삼안";
+    const memo  = document.getElementById("memo").value.trim();
+    const avgVelocity = (validVels.reduce((a,b)=>a+b,0)/validVels.length).toFixed(3);
+
+    const fd = new FormData();
+    fd.append("channel_id", channelId);
+    fd.append("width",     width);
+    fd.append("depth",     depth);
+    fd.append("height",    height);
+    fd.append("v1",        v1);
+    fd.append("v2",        v2);
+    fd.append("v3",        v3);
+    fd.append("velocity",  avgVelocity);
+    fd.append("heading",   currentHeading !== null ? currentHeading.toString() : "0");
+    fd.append("memo",      memo);
+    fd.append("latitude",  currentLat || "0");
+    fd.append("longitude", currentLng || "0");
+    fd.append("device", deviceName);
+    fd.append("rpm1", rpm1); fd.append("rpm2", rpm2); fd.append("rpm3", rpm3);
+    fd.append("n1", n1);     fd.append("n2", n2);     fd.append("n3", n3);
+    staging.forEach((sp, i) => fd.append("images", sp.blob, `photo${i+1}.jpg`));
+    return { ok:true, fd };
+  }
+
+  async function sendToServer(fd) {
+    showStatus("loading", '<span class="spinner"></span>' + t("sending"));
+    try {
+      const res  = await fetch(SERVER_URL, { method:"POST", body:fd });
+      const data = await res.json();
+      if (res.ok) {
+        showStatus("ok", t("sentOk"));
+        resetForm();
+      } else {
+        showStatus("err", t("serverErr")+(data.detail||t("unknownErr")));
+      }
+    } catch(err) {
+      showStatus("err", t("netErr"));
+    }
+  }
+
+  /* ── 사진+GPS 확인 후 전송 (팝업 경로) ── */
+  async function confirmAndUpload() {
+    closePopup();
+    const r = collectFormData();
+    if (!r.ok) { alert(r.msg); return; }
+    await sendToServer(r.fd);
+  }
+
+  /* ── GPS 취득 (Promise) ── */
+  function acquireGPS() {
+    return new Promise(resolve => {
+      if (!navigator.geolocation) { resolve(false); return; }
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          currentLat = pos.coords.latitude.toFixed(6);
+          currentLng = pos.coords.longitude.toFixed(6);
+          if (currentHeading === null && pos.coords.heading !== null && !isNaN(pos.coords.heading))
+            currentHeading = Math.round(pos.coords.heading);
+          resolve(true);
+        },
+        () => resolve(false),
+        { enableHighAccuracy: true, timeout: 15000 }
+      );
+    });
+  }
+
+  /* ── 바로 전송 (사진/ID/단면 없어도 유속만 있으면 OK) ── */
+  async function directUpload() {
+    const r = collectFormData();          // 먼저 유속 입력 검증
+    if (!r.ok) { alert(r.msg); return; }
+    // 좌표가 아직 없으면 지금 취득 (버튼 탭 = 사용자 제스처 → iOS 권한 OK)
+    if (currentLat === null || currentLng === null || currentLat === "0") {
+      showStatus("loading", '<span class="spinner"></span>' + t("locating"));
+      startCompass();                     // iOS 나침반 권한 요청
+      await acquireGPS();
+    }
+    const r2 = collectFormData();         // 취득한 좌표 반영해 다시 수집
+    if (!r2.ok) { alert(r2.msg); return; }
+    await sendToServer(r2.fd);
+  }
+
+  function showStatus(type, html) {
+    const el = document.getElementById("statusMsg");
+    el.className = "msg-"+type; el.innerHTML = html; el.style.display = "block";
+    if (type !== "loading") setTimeout(() => { el.style.display = "none"; }, 6000);
+  }
+
+  function resetForm() {
+    ["channelId","width","depth","height","v1","v2","v3","rpm1","rpm2","rpm3","memo"].forEach(id =>
+      document.getElementById(id).value = "");
+    ["conv1","conv2","conv3"].forEach(id => document.getElementById(id).textContent = "—");
+    document.getElementById("avgDisplay").textContent = "— m/s";
+    document.getElementById("manningBox").style.display = "none";
+    currentLat = null; currentLng = null; currentHeading = null;
+    setDevice("saman");
+    staging.forEach(sp => URL.revokeObjectURL(sp.url)); staging = []; renderStaging();
+  }
+
+</script>
+</body>
+</html>
